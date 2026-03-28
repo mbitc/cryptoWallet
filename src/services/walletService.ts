@@ -9,11 +9,11 @@
  * su API raktu ir fallback logika.
  */
 
-import { Wallet, HDNodeWallet, JsonRpcProvider, parseEther, formatEther, isAddress } from 'ethers';
+import { formatEther, HDNodeWallet, isAddress, JsonRpcProvider, parseEther, Wallet } from 'ethers';
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 // Rekomenduojama: pakeisti į savo Alchemy/Infura Sepolia endpoint
-const SEPOLIA_RPC = 'https://rpc.sepolia.org';
+const SEPOLIA_RPC = 'https://eth-sepolia-testnet.api.pocket.network';
 
 let _provider: JsonRpcProvider | null = null;
 
@@ -27,9 +27,9 @@ function getProvider(): JsonRpcProvider {
 // ─── Wallet kūrimas ──────────────────────────────────────────────────────────
 
 export interface NewWalletResult {
-  address:    string;
+  address: string;
   privateKey: string;
-  mnemonic:   string;
+  mnemonic: string;
 }
 
 /**
@@ -40,9 +40,9 @@ export interface NewWalletResult {
 export function createNewWallet(): NewWalletResult {
   const wallet = Wallet.createRandom() as HDNodeWallet;
   return {
-    address:    wallet.address,
+    address: wallet.address,
     privateKey: wallet.privateKey,
-    mnemonic:   wallet.mnemonic?.phrase ?? '',
+    mnemonic: wallet.mnemonic?.phrase ?? '',
   };
 }
 

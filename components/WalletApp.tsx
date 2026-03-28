@@ -18,7 +18,6 @@ import {
   Clipboard,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +26,7 @@ import {
   View,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   decryptAndLoad,
@@ -596,7 +596,7 @@ const WalletScreen = ({
                   }}
                 >
                   <Text style={styles.successTxt}>
-                    ✓ Išsiųsta!{}
+                    ✓ Išsiųsta!
                     <Text style={{ fontSize: 11, color: C.textMuted }}>
                       {txHash.slice(0, 12)}…{txHash.slice(-8)}
                     </Text>
@@ -700,36 +700,40 @@ export default function WalletApp() {
       .catch(() => setAppState('setup'));
   }, []);
 
-  if (appState === 'loading')
-    return (
-      <SafeAreaView style={styles.center}>
-        <ActivityIndicator color={C.accent} size='large' />
-      </SafeAreaView>
-    );
-  if (appState === 'setup')
-    return <SetupScreen onComplete={() => setAppState('pin')} />;
-  if (appState === 'pin')
-    return (
-      <PinScreen
-        onUnlock={(w, _pk) => {
-          setWallet(w);
-          setAddress(w.address);
-          setAppState('wallet');
-        }}
-      />
-    );
-  if (appState === 'wallet' && wallet)
-    return (
-      <WalletScreen
-        wallet={wallet}
-        address={address}
-        onLock={() => {
-          setWallet(null);
-          setAppState('pin');
-        }}
-      />
-    );
-  return null;
+  const content = () => {
+    if (appState === 'loading')
+      return (
+        <SafeAreaView style={styles.center}>
+          <ActivityIndicator color={C.accent} size='large' />
+        </SafeAreaView>
+      );
+    if (appState === 'setup')
+      return <SetupScreen onComplete={() => setAppState('pin')} />;
+    if (appState === 'pin')
+      return (
+        <PinScreen
+          onUnlock={(w, _pk) => {
+            setWallet(w);
+            setAddress(w.address);
+            setAppState('wallet');
+          }}
+        />
+      );
+    if (appState === 'wallet' && wallet)
+      return (
+        <WalletScreen
+          wallet={wallet}
+          address={address}
+          onLock={() => {
+            setWallet(null);
+            setAppState('pin');
+          }}
+        />
+      );
+    return null;
+  };
+
+  return <SafeAreaProvider>{content()}</SafeAreaProvider>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
