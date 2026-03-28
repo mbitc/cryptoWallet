@@ -1,14 +1,11 @@
 /**
- * WalletApp.tsx — Sepolia ETH piniginė (pataisyta versija)
- *
- * Pataisymai:
- *   1. PinInput: vietoj pasleptą TextInput naudojame skaidrų matomą —
- *      tai sprendžia "negali prisijungti prie savybės none" klaidą
- *   2. Setup PIN: du laukai vienu metu → vienas laukas per žingsnį
- *   3. async handlers: apsaugoti su mounted ref
+ * WalletApp.tsx - Sepolia ETH piniginė
+ * Naujos funkcijos:
+ *   - Privataus rakto peržiūra (su PIN patvirtinimu)
+ *   - Piniginės išvalymas (su PIN patvirtinimu + atkurimo frazės įspėjimas)
  */
 
-import { Wallet } from 'ethers';
+import { ethers } from 'ethers';
 import { Camera, CameraView } from 'expo-camera';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -30,6 +27,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   decryptAndLoad,
+  deleteWallet,
   encryptAndStore,
   walletExists,
 } from '../src/crypto/walletCrypto';
@@ -54,6 +52,7 @@ const C = {
   success: '#2ECC71',
   warning: '#F39C12',
 };
+
 const AUTO_LOCK_MS = 10 * 60 * 1000;
 const BALANCE_INT_MS = 15 * 1000;
 
@@ -86,9 +85,7 @@ const Btn = ({
   </TouchableOpacity>
 );
 
-// ─── PIN įvestis ──────────────────────────────────────────────────────────────
-// TextInput su skaidriu tekstu — taškai rodo progresą.
-// Tai patikimesnis sprendimas nei paslėptas laukas.
+// ─── PIN ivestis ──────────────────────────────────────────────────────────────
 
 const PinInput = ({
   value,
@@ -153,17 +150,6 @@ const SetupScreen = ({ onComplete }: { onComplete: () => void }) => {
     setStep('mnemonic');
   };
 
-  const handleMnemonicNext = () => {
-    if (!confirmed) {
-      Alert.alert(
-        'Būtina patvirtinti',
-        'Pažymėkite, kad užsirašėte atkūrimo frazę.',
-      );
-      return;
-    }
-    setStep('pin');
-  };
-
   const handlePinChange = (v: string) => {
     if (pinStep === 'first') {
       setPin(v);
@@ -198,15 +184,17 @@ const SetupScreen = ({ onComplete }: { onComplete: () => void }) => {
 
   if (step === 'generate')
     return (
-      <SafeAreaView style={styles.center}>
-        <Text style={styles.h1}>Sepolia Piniginė</Text>
-        <Text style={styles.sub}>Testinis tinklas · ETH</Text>
-        <View style={{ height: 48 }} />
-        <Btn
-          label='Sukurti naują piniginę'
-          onPress={handleGenerate}
-          style={styles.btnAccent}
-        />
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.center}>
+          <Text style={styles.h1}>Sepolia piniginė</Text>
+          <Text style={styles.sub}>Testinis tinklas ETH</Text>
+          <View style={{ height: 48 }} />
+          <Btn
+            label='Sukurti naują piniginę'
+            onPress={handleGenerate}
+            style={styles.btnAccent}
+          />
+        </View>
       </SafeAreaView>
     );
 
@@ -214,15 +202,15 @@ const SetupScreen = ({ onComplete }: { onComplete: () => void }) => {
     return (
       <SafeAreaView style={styles.screen}>
         <ScrollView contentContainerStyle={styles.padded}>
-          <Text style={styles.h2}>Atkūrimo frazė</Text>
-          <Text style={styles.warning}>
-            ⚠️ Užsirašykite šiuos 12 žodžių popieriuje. Jei prarasite —
-            piniginės atkurti bus{' '}
-            <Text style={{ color: C.danger, fontWeight: '700' }}>
-              neįmanoma
+          <Text style={styles.h2}>Atkurimo frazė</Text>
+          <View style={styles.warningBox}>
+            <Text style={styles.warningTxt}>
+              Užsirašykite šiuos 12 žodžių popieriuje ir laikykite saugiai.
+              {'\n'}
+              Jei prarasite — piniginės atkurti bus NEĮMANOMA.{'\n'}
+              Programa šios frazės daugiau NIEKADA nerodo.
             </Text>
-            . Programa šios frazės daugiau NIEKADA nerodys.
-          </Text>
+          </View>
           <View style={styles.mnemonicGrid}>
             {wallet.mnemonic.split(' ').map((word, i) => (
               <View key={i} style={styles.mnemonicWord}>
@@ -237,16 +225,22 @@ const SetupScreen = ({ onComplete }: { onComplete: () => void }) => {
             activeOpacity={0.8}
           >
             <View style={[styles.checkbox, confirmed && styles.checkboxFilled]}>
-              {confirmed && <Text style={styles.checkmark}>✓</Text>}
+              {confirmed && <Text style={styles.checkmark}>V</Text>}
             </View>
             <Text style={styles.checkLabel}>
-              Užsirašiau atkūrimo frazę ir suprantu, kad jos praradimas reiškia
+              Užsirašiau atkurimo frazę ir suprantu, kad jos praradimas reiškia
               amžiną lėšų praradimą.
             </Text>
           </TouchableOpacity>
           <Btn
-            label='Tęsti →'
-            onPress={handleMnemonicNext}
+            label='Tęsti'
+            onPress={() => {
+              if (!confirmed) {
+                Alert.alert('Būtina patvirtinti', 'Pažymėkite žymėjimą.');
+                return;
+              }
+              setStep('pin');
+            }}
             style={[styles.btnAccent, { marginTop: 24 }]}
             disabled={!confirmed}
           />
@@ -256,44 +250,46 @@ const SetupScreen = ({ onComplete }: { onComplete: () => void }) => {
 
   if (step === 'pin')
     return (
-      <SafeAreaView style={styles.center}>
-        <Text style={styles.h2}>
-          {pinStep === 'first' ? 'Nustatykite PIN' : 'Pakartokite PIN'}
-        </Text>
-        <Text style={styles.sub}>
-          {pinStep === 'first'
-            ? '6 skaitmenų PIN saugos jūsų piniginę'
-            : 'Įveskite PIN dar kartą patvirtinimui'}
-        </Text>
-        <PinInput
-          key={pinStep}
-          value={pinStep === 'first' ? pin : pin2}
-          onChange={handlePinChange}
-          label={pinStep === 'first' ? 'Naujas PIN' : 'Pakartokite'}
-          autoFocus={true}
-        />
-        {pinStep === 'second' && pin2.length === 6 && (
-          <Btn
-            label='Išsaugoti'
-            onPress={handleSavePin}
-            style={[styles.btnAccent, { marginTop: 32 }]}
-            loading={busy}
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.center}>
+          <Text style={styles.h2}>
+            {pinStep === 'first' ? 'Nustatykite PIN' : 'Pakartokite PIN'}
+          </Text>
+          <Text style={styles.sub}>
+            {pinStep === 'first'
+              ? '6 skaitmenų PIN saugos jūsų piniginę'
+              : 'Įveskite PIN dar kartą'}
+          </Text>
+          <PinInput
+            key={pinStep}
+            value={pinStep === 'first' ? pin : pin2}
+            onChange={handlePinChange}
+            label=''
+            autoFocus={true}
           />
-        )}
-        {pinStep === 'second' && (
-          <TouchableOpacity
-            style={{ marginTop: 16 }}
-            onPress={() => {
-              setPin('');
-              setPin2('');
-              setPinStep('first');
-            }}
-          >
-            <Text style={{ color: C.textMuted, fontSize: 13 }}>
-              ← Pradėti iš naujo
-            </Text>
-          </TouchableOpacity>
-        )}
+          {pinStep === 'second' && pin2.length === 6 && (
+            <Btn
+              label='Išsaugoti'
+              onPress={handleSavePin}
+              style={[styles.btnAccent, { marginTop: 32 }]}
+              loading={busy}
+            />
+          )}
+          {pinStep === 'second' && (
+            <TouchableOpacity
+              style={{ marginTop: 16 }}
+              onPress={() => {
+                setPin('');
+                setPin2('');
+                setPinStep('first');
+              }}
+            >
+              <Text style={{ color: C.textMuted, fontSize: 13 }}>
+                Pradėti iš naujo
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </SafeAreaView>
     );
 
@@ -304,11 +300,7 @@ const SetupScreen = ({ onComplete }: { onComplete: () => void }) => {
 // 2. PIN SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const PinScreen = ({
-  onUnlock,
-}: {
-  onUnlock: (w: Wallet, pk: string) => void;
-}) => {
+const PinScreen = ({ onUnlock }: { onUnlock: (w: ethers.Wallet) => void }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -331,7 +323,7 @@ const PinScreen = ({
     try {
       const pk = await decryptAndLoad(p);
       const w = walletFromPrivateKey(pk);
-      if (mounted.current) onUnlock(w, pk);
+      if (mounted.current) onUnlock(w);
     } catch (e: any) {
       if (!mounted.current) return;
       setPin('');
@@ -341,7 +333,7 @@ const PinScreen = ({
         e.message === 'WRONG_PIN'
           ? next >= 10
             ? 'Per daug bandymų.'
-            : `Neteisingas PIN. Bandymas ${next}/10.`
+            : 'Neteisingas PIN. Bandymas ' + next + '/10.'
           : 'Klaida: ' + (e.message ?? 'nežinoma'),
       );
     } finally {
@@ -350,19 +342,21 @@ const PinScreen = ({
   };
 
   return (
-    <SafeAreaView style={styles.center}>
-      <Text style={styles.h2}>Įveskite PIN</Text>
-      <Text style={styles.sub}>Piniginė užrakinta</Text>
-      {busy ? (
-        <ActivityIndicator
-          color={C.accent}
-          size='large'
-          style={{ marginTop: 40 }}
-        />
-      ) : (
-        <PinInput value={pin} onChange={setPin} label='' autoFocus={true} />
-      )}
-      {!!error && <Text style={styles.errorTxt}>{error}</Text>}
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.center}>
+        <Text style={styles.h2}>Įveskite PIN</Text>
+        <Text style={styles.sub}>Piniginė užrakinta</Text>
+        {busy ? (
+          <ActivityIndicator
+            color={C.accent}
+            size='large'
+            style={{ marginTop: 40 }}
+          />
+        ) : (
+          <PinInput value={pin} onChange={setPin} label='' autoFocus={true} />
+        )}
+        {!!error && <Text style={styles.errorTxt}>{error}</Text>}
+      </View>
     </SafeAreaView>
   );
 };
@@ -372,15 +366,18 @@ const PinScreen = ({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 type Tab = 'home' | 'send' | 'receive' | 'scan';
+type ModalType = 'none' | 'pk' | 'reset';
 
 const WalletScreen = ({
   wallet,
   address,
   onLock,
+  onReset,
 }: {
-  wallet: Wallet;
+  wallet: ethers.Wallet;
   address: string;
   onLock: () => void;
+  onReset: () => void;
 }) => {
   const [balance, setBalance] = useState('...');
   const [tab, setTab] = useState<Tab>('home');
@@ -391,6 +388,12 @@ const WalletScreen = ({
   const [sendErr, setSendErr] = useState('');
   const [camPerm, setCamPerm] = useState(false);
   const [scanned, setScanned] = useState(false);
+  const [modal, setModal] = useState<ModalType>('none');
+  const [modalPin, setModalPin] = useState('');
+  const [modalErr, setModalErr] = useState('');
+  const [modalBusy, setModalBusy] = useState(false);
+  const [shownPk, setShownPk] = useState('');
+
   const mounted = useRef(true);
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -442,6 +445,63 @@ const WalletScreen = ({
     }
   }, [tab]);
 
+  const openModal = (type: ModalType) => {
+    setModal(type);
+    setModalPin('');
+    setModalErr('');
+    setShownPk('');
+    resetLockTimer();
+  };
+
+  const closeModal = () => {
+    setModal('none');
+    setModalPin('');
+    setModalErr('');
+    setShownPk('');
+  };
+
+  // ── Privataus rakto rodymas ───────────────────────────────────────────────────
+  const handleShowPk = async () => {
+    if (modalPin.length !== 6 || modalBusy) return;
+    setModalBusy(true);
+    setModalErr('');
+    try {
+      const pk = await decryptAndLoad(modalPin);
+      if (mounted.current) {
+        setShownPk(pk);
+        setModalPin('');
+      }
+    } catch (e: any) {
+      if (mounted.current) {
+        setModalErr(e.message === 'WRONG_PIN' ? 'Neteisingas PIN.' : 'Klaida.');
+        setModalPin('');
+      }
+    } finally {
+      if (mounted.current) setModalBusy(false);
+    }
+    resetLockTimer();
+  };
+
+  // ── Piniginės išvalymas ──────────────────────────────────────────────────
+  const handleReset = async () => {
+    if (modalPin.length !== 6 || modalBusy) return;
+    setModalBusy(true);
+    setModalErr('');
+    try {
+      await decryptAndLoad(modalPin);
+      await deleteWallet();
+      if (mounted.current) onReset();
+    } catch (e: any) {
+      if (mounted.current) {
+        setModalErr(e.message === 'WRONG_PIN' ? 'Neteisingas PIN.' : 'Klaida.');
+        setModalPin('');
+      }
+    } finally {
+      if (mounted.current) setModalBusy(false);
+    }
+  };
+
+  // ── Siuntimas ─────────────────────────────────────────────────────────────
   const handleSend = async () => {
     setSendErr('');
     setTxHash('');
@@ -483,22 +543,118 @@ const WalletScreen = ({
     }
   };
 
+  // ── Modalas ───────────────────────────────────────────────────────────────
+  const renderModal = () => {
+    if (modal === 'none') return null;
+    const isPk = modal === 'pk';
+    return (
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalBox}>
+          <Text style={styles.modalTitle}>
+            {isPk ? 'Privatus raktas' : 'Išvalyti piniginę'}
+          </Text>
+
+          {isPk && !!shownPk ? (
+            // Rodomas privatus raktas
+            <>
+              <View style={styles.warningBox}>
+                <Text style={styles.warningTxt}>
+                  Niekada nesidalinkite šiuo raktu. Kas turės šį raktą — valdys
+                  jūsų lėšas.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.pkBox}
+                onPress={() => {
+                  Clipboard.setString(shownPk);
+                  Alert.alert('Nukopijuota', 'Privatus raktas nukopijuotas.');
+                }}
+              >
+                <Text style={styles.pkTxt}>{shownPk}</Text>
+                <Text
+                  style={[styles.fieldLabel, { color: C.accent, marginTop: 8 }]}
+                >
+                  nukopijuoti
+                </Text>
+              </TouchableOpacity>
+              <Btn
+                label='Uždaryti'
+                onPress={closeModal}
+                style={[styles.btnAccent, { marginTop: 16 }]}
+              />
+            </>
+          ) : (
+            // PIN ivedimas
+            <>
+              {!isPk && (
+                <View style={styles.warningBox}>
+                  <Text style={styles.warningTxt}>
+                    Šis veiksmas neatstatomas. Įsitikinkite, kad turite atkurimo
+                    frazę.{'\n'}
+                    Visi duomenys bus ištrinti.
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.modalSub}>Patvirtinkite PIN</Text>
+              <PinInput
+                key={modal}
+                value={modalPin}
+                onChange={(v) => {
+                  setModalPin(v);
+                  setModalErr('');
+                }}
+                label=''
+                autoFocus={true}
+              />
+              {!!modalErr && <Text style={styles.errorTxt}>{modalErr}</Text>}
+              <View style={styles.modalBtns}>
+                <Btn
+                  label='Atgal'
+                  onPress={closeModal}
+                  style={{ flex: 1, marginRight: 8 }}
+                />
+                <Btn
+                  label={isPk ? 'Rodyti' : 'Išvalyti'}
+                  onPress={isPk ? handleShowPk : handleReset}
+                  style={[
+                    { flex: 1 },
+                    isPk
+                      ? styles.btnAccent
+                      : {
+                          backgroundColor: C.danger,
+                          borderColor: C.danger,
+                          borderWidth: 1,
+                          borderRadius: 12,
+                        },
+                  ]}
+                  loading={modalBusy}
+                  disabled={modalPin.length !== 6}
+                />
+              </View>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   const tabs = [
-    { id: 'home' as Tab, icon: '◈', label: 'Namai' },
-    { id: 'receive' as Tab, icon: '↓', label: 'Gauti' },
-    { id: 'send' as Tab, icon: '↑', label: 'Siųsti' },
-    { id: 'scan' as Tab, icon: '▦', label: 'Skaityti' },
+    { id: 'home' as Tab, label: 'Namai' },
+    { id: 'receive' as Tab, label: 'Gauti' },
+    { id: 'send' as Tab, label: 'Siųsti' },
+    { id: 'scan' as Tab, label: 'Skaityti' },
   ];
 
   const renderContent = () => {
     switch (tab) {
       case 'home':
         return (
-          <View style={styles.homeTab}>
+          <ScrollView contentContainerStyle={styles.homeTab}>
             <Text style={styles.networkBadge}>SEPOLIA TESTNET</Text>
-            <Text style={styles.balanceLabel}>Balansas</Text>
+            <Text style={styles.balanceLabel}>BALANSAS</Text>
             <Text style={styles.balanceAmt}>{balance}</Text>
             <Text style={styles.balanceCur}>ETH</Text>
+
             <TouchableOpacity
               style={styles.addrBox}
               onPress={() => {
@@ -507,14 +663,32 @@ const WalletScreen = ({
               }}
             >
               <Text style={styles.addrTxt}>
-                {address.slice(0, 8)}…{address.slice(-6)}
+                {address.slice(0, 8)}...{address.slice(-6)}
               </Text>
               <Text style={styles.addrCopy}>nukopijuoti</Text>
             </TouchableOpacity>
+
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => openModal('pk')}
+              >
+                <Text style={styles.actionLabel}>Privatus raktas</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnDanger]}
+                onPress={() => openModal('reset')}
+              >
+                <Text style={[styles.actionLabel, { color: C.danger }]}>
+                  Išvalyti
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity style={styles.lockBtn} onPress={onLock}>
-              <Text style={styles.lockBtnTxt}>⏻ Užrakinti</Text>
+              <Text style={styles.lockBtnTxt}>Užrakinti</Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         );
 
       case 'receive':
@@ -567,9 +741,12 @@ const WalletScreen = ({
                 />
                 <TouchableOpacity
                   style={styles.scanInlineBtn}
-                  onPress={() => setTab('scan')}
+                  onPress={() => {
+                    setTab('scan');
+                    resetLockTimer();
+                  }}
                 >
-                  <Text style={{ color: C.accent, fontSize: 18 }}>▦</Text>
+                  <Text style={{ color: C.accent, fontSize: 16 }}>QR</Text>
                 </TouchableOpacity>
               </View>
               <Text style={[styles.fieldLabel, { marginTop: 16 }]}>
@@ -596,9 +773,9 @@ const WalletScreen = ({
                   }}
                 >
                   <Text style={styles.successTxt}>
-                    ✓ Išsiųsta!
+                    Išsiųsta!{'\n'}
                     <Text style={{ fontSize: 11, color: C.textMuted }}>
-                      {txHash.slice(0, 12)}…{txHash.slice(-8)}
+                      {txHash.slice(0, 12)}...{txHash.slice(-8)}
                     </Text>
                   </Text>
                 </TouchableOpacity>
@@ -654,7 +831,10 @@ const WalletScreen = ({
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={{ flex: 1 }}>{renderContent()}</View>
+      <View style={{ flex: 1 }}>
+        {renderContent()}
+        {renderModal()}
+      </View>
       <View style={styles.tabBar}>
         {tabs.map((t) => (
           <TouchableOpacity
@@ -666,11 +846,6 @@ const WalletScreen = ({
             }}
             activeOpacity={0.7}
           >
-            <Text
-              style={[styles.tabIcon, tab === t.id && styles.tabIconActive]}
-            >
-              {t.icon}
-            </Text>
             <Text
               style={[styles.tabLabel, tab === t.id && styles.tabLabelActive]}
             >
@@ -691,7 +866,7 @@ type AppState_ = 'loading' | 'setup' | 'pin' | 'wallet';
 
 export default function WalletApp() {
   const [appState, setAppState] = useState<AppState_>('loading');
-  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [wallet, setWallet] = useState<ethers.Wallet | null>(null);
   const [address, setAddress] = useState('');
 
   useEffect(() => {
@@ -703,8 +878,10 @@ export default function WalletApp() {
   const content = () => {
     if (appState === 'loading')
       return (
-        <SafeAreaView style={styles.center}>
-          <ActivityIndicator color={C.accent} size='large' />
+        <SafeAreaView style={styles.screen}>
+          <View style={styles.center}>
+            <ActivityIndicator color={C.accent} size='large' />
+          </View>
         </SafeAreaView>
       );
     if (appState === 'setup')
@@ -712,7 +889,7 @@ export default function WalletApp() {
     if (appState === 'pin')
       return (
         <PinScreen
-          onUnlock={(w, _pk) => {
+          onUnlock={(w) => {
             setWallet(w);
             setAddress(w.address);
             setAppState('wallet');
@@ -727,6 +904,11 @@ export default function WalletApp() {
           onLock={() => {
             setWallet(null);
             setAppState('pin');
+          }}
+          onReset={() => {
+            setWallet(null);
+            setAddress('');
+            setAppState('setup');
           }}
         />
       );
@@ -744,7 +926,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   center: {
     flex: 1,
-    backgroundColor: C.bg,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
@@ -772,17 +953,17 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: 'center',
   },
-  warning: {
-    color: C.warning,
-    fontSize: 13,
-    lineHeight: 20,
+
+  warningBox: {
     backgroundColor: '#1A1500',
     borderRadius: 10,
     padding: 14,
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#3A3000',
   },
+  warningTxt: { color: C.warning, fontSize: 13, lineHeight: 20 },
+
   errorTxt: {
     color: C.danger,
     fontSize: 13,
@@ -849,6 +1030,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     padding: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   mnemonicGrid: {
@@ -901,10 +1084,10 @@ const styles = StyleSheet.create({
   checkLabel: { color: C.textMuted, fontSize: 13, lineHeight: 19, flex: 1 },
 
   homeTab: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
     padding: 32,
+    paddingTop: 48,
+    paddingBottom: 48,
   },
   networkBadge: {
     color: C.accent,
@@ -954,6 +1137,64 @@ const styles = StyleSheet.create({
   lockBtnTxt: { color: C.textMuted, fontSize: 14 },
   balanceHint: { color: C.textMuted, fontSize: 12, marginTop: 6 },
 
+  actionRow: { flexDirection: 'row', gap: 12, marginTop: 20, width: '100%' },
+  actionBtn: {
+    flex: 1,
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  actionBtnDanger: { borderColor: '#FF475766' },
+  actionLabel: { color: C.textMuted, fontSize: 13, fontWeight: '600' },
+
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000000DD',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+    padding: 16,
+  },
+  modalBox: {
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  modalTitle: {
+    color: C.text,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSub: { color: C.textMuted, fontSize: 13, textAlign: 'center' },
+  modalBtns: { flexDirection: 'row', marginTop: 20 },
+  pkBox: {
+    backgroundColor: C.bg,
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  pkTxt: {
+    color: C.text,
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    lineHeight: 18,
+  },
+
   receiveTab: { flex: 1, alignItems: 'center', padding: 24 },
   tabTitle: {
     color: C.text,
@@ -991,9 +1232,7 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     paddingTop: 10,
   },
-  tabItem: { flex: 1, alignItems: 'center', gap: 4 },
-  tabIcon: { fontSize: 20, color: C.textMuted },
-  tabIconActive: { color: C.accent },
-  tabLabel: { fontSize: 10, color: C.textMuted },
-  tabLabelActive: { color: C.accent },
+  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 6 },
+  tabLabel: { fontSize: 12, color: C.textMuted },
+  tabLabelActive: { color: C.accent, fontWeight: '600' },
 });
