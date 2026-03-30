@@ -27,7 +27,7 @@ npm i react-native-qrcode-svg
 ## Failų struktūra
 
 ```
-SepoliaWallet/
+CrytoWallet/
 ├── WalletApp.tsx          ← Pagrindinis komponentas (prijungiamas prie App.tsx)
 └── crypto/
     ├── walletCrypto.ts    ← AES-256-GCM šifravimas / iššifravimas
