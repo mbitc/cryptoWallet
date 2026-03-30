@@ -1,6 +1,6 @@
-# Sepolia ETH Piniginė
+# ETH Piniginė
 
-Vieno ekrano Sepolia testinio tinklo piniginė, sukurta su Expo / React Native.
+Vieno ekrano ETH tinklo piniginė, sukurta su Expo / React Native.
 
 ## Priklausomybės
 
@@ -65,12 +65,12 @@ Blob: salt[32] | iv[12] | authTag[16] | ciphertext
 
 ### Ką tai reiškia praktiškai:
 
-| Grėsmė | Apsauga |
-|---|---|
-| Fizinė prieiga prie įrenginio | SecureStore → iOS Keychain / Android Keystore |
-| PIN atspėjimas | 100k PBKDF2 iteracijų + GCM authTag patikrinimas |
-| Backup ištraukimas | Keychain įrašas nėra iCloud/Google backup'e (pagal nutylėjimą) |
-| Šifravimo nulaužimas | AES-256-GCM yra dabartinis pramonės standartas |
+| Grėsmė                        | Apsauga                                                        |
+| ----------------------------- | -------------------------------------------------------------- |
+| Fizinė prieiga prie įrenginio | SecureStore → iOS Keychain / Android Keystore                  |
+| PIN atspėjimas                | 100k PBKDF2 iteracijų + GCM authTag patikrinimas               |
+| Backup ištraukimas            | Keychain įrašas nėra iCloud/Google backup'e (pagal nutylėjimą) |
+| Šifravimo nulaužimas          | AES-256-GCM yra dabartinis pramonės standartas                 |
 
 ## Funkcionalumas
 
