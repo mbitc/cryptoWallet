@@ -47,7 +47,7 @@ const C = {
   accent: '#6C63FF',
   accentDim: '#3D3875',
   text: '#E8E8F0',
-  textMuted: '#6B6B8A',
+  textMuted: '#77778d',
   danger: '#FF4757',
   success: '#2ECC71',
   warning: '#F39C12',
