@@ -13,13 +13,13 @@ import { formatEther, HDNodeWallet, isAddress, JsonRpcProvider, parseEther, Wall
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 // Rekomenduojama: pakeisti į savo Alchemy/Infura Sepolia endpoint
-const SEPOLIA_RPC = 'https://eth-sepolia-testnet.api.pocket.network';
+const ETHEREUM_MAINNET_RPC = 'https://ethereum-rpc.publicnode.com';
 
 let _provider: JsonRpcProvider | null = null;
 
 function getProvider(): JsonRpcProvider {
   if (!_provider) {
-    _provider = new JsonRpcProvider(SEPOLIA_RPC);
+    _provider = new JsonRpcProvider(ETHEREUM_MAINNET_RPC);
   }
   return _provider;
 }

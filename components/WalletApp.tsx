@@ -1,5 +1,5 @@
 /**
- * WalletApp.tsx - Sepolia ETH piniginė
+ * WalletApp.tsx - ETH piniginė
  * Naujos funkcijos:
  *   - Privataus rakto peržiūra (su PIN patvirtinimu)
  *   - Piniginės išvalymas (su PIN patvirtinimu + atkurimo frazės įspėjimas)
@@ -186,8 +186,8 @@ const SetupScreen = ({ onComplete }: { onComplete: () => void }) => {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.center}>
-          <Text style={styles.h1}>Sepolia piniginė</Text>
-          <Text style={styles.sub}>Testinis tinklas ETH</Text>
+          <Text style={styles.h1}>ETH piniginė</Text>
+          <Text style={styles.sub}>tinklas ETH</Text>
           <View style={{ height: 48 }} />
           <Btn
             label='Sukurti naują piniginę'
@@ -650,7 +650,7 @@ const WalletScreen = ({
       case 'home':
         return (
           <ScrollView contentContainerStyle={styles.homeTab}>
-            <Text style={styles.networkBadge}>SEPOLIA TESTNET</Text>
+            <Text style={styles.networkBadge}> ETH mainnet</Text>
             <Text style={styles.balanceLabel}>BALANSAS</Text>
             <Text style={styles.balanceAmt}>{balance}</Text>
             <Text style={styles.balanceCur}>ETH</Text>
@@ -713,7 +713,7 @@ const WalletScreen = ({
               <Text style={[styles.addrTxt, { fontSize: 11 }]}>{address}</Text>
               <Text style={styles.addrCopy}>nukopijuoti</Text>
             </TouchableOpacity>
-            <Text style={styles.notice}>Tik Sepolia testinio tinklo ETH</Text>
+            <Text style={styles.notice}>ETH mainnet</Text>
           </View>
         );
 
